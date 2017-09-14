@@ -51,11 +51,8 @@ class SimpleFile(object):
         """
         if self.isIndexError(line_number):
             return 'null'		
-        sum = 0
         row = self.numbers[line_number]
-        for num in row:
-            sum += num
-        return sum
+        return sum(row)
 
     def isIndexError(self, line_number):
         """
