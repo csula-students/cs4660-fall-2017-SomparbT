@@ -49,7 +49,7 @@ def construct_graph_from_file(graph, file_path):
             graph.add_node(from_node)
             graph.add_node(to_node)
             graph.add_edge(edge)
-    file.close();
+    file.close()
     return graph
 
 class Node(object):
@@ -146,6 +146,14 @@ class AdjacencyList(object):
         adj_edges.remove(edge)
         return True
 
+    def distance(self, node_1, node_2):
+        if not self.adjacent(node_1, node_2):
+            return None # No edge connected
+        edges = self.adjacency_list[node_1]
+        for edge in edges:
+            if (edge.to_node == node_2):
+                return edge.weight
+
 class AdjacencyMatrix(object):
     def __init__(self):
         # adjacency_matrix should be a two dimensions array of numbers that
@@ -170,8 +178,12 @@ class AdjacencyMatrix(object):
         neighbor_weights = self.adjacency_matrix[node_index]
         for index, existing_node in enumerate(self.nodes):
             if neighbor_weights[index] != 0:
-                neighbors.append(existing_node)         
-        neighbors.sort(key=lambda node: node.data)
+                neighbors.append(existing_node)
+        try:                 
+            neighbors.sort(key=lambda node: node.data)
+        except TypeError:
+            #in case that data is not orderable 
+            return neighbors    
         return neighbors
 
     def add_node(self, node):
@@ -216,6 +228,15 @@ class AdjacencyMatrix(object):
         self.adjacency_matrix[node_1_index][node_2_index] = 0
         return True
 
+    def distance(self, node_1, node_2):
+        if not self.adjacent(node_1, node_2):
+            return None # No edge connected
+        node_1_index = self.__get_node_index(node_1)
+        node_2_index = self.__get_node_index(node_2)
+        if self.adjacency_matrix[node_1_index][node_2_index] == 0:
+            return None #edge not exist
+        return self.adjacency_matrix[node_1_index][node_2_index]
+
     def __get_node_index(self, node):
         """helper method to find node index"""
         return self.nodes.index(node)
@@ -234,11 +255,17 @@ class ObjectOriented(object):
         return False
 
     def neighbors(self, node):
-        neighbors = set()
+        neighbors = []
         for edge in self.edges:
             if edge.from_node == node:
-                neighbors.add(edge.to_node)
-        return list(neighbors)
+                neighbors.append(edge.to_node)
+        #return list(neighbors)
+        try:                 
+            neighbors.sort(key=lambda node: node.data)
+        except TypeError:
+            #in case that data is not orderable 
+            return neighbors    
+        return neighbors
 
     def add_node(self, node):
         if node in self.nodes:
@@ -268,41 +295,10 @@ class ObjectOriented(object):
         self.edges.remove(edge)
         return True
 
-
-"""
-g = AdjacencyList()
-graph = construct_graph_from_file(g, '../test/fixtures/graph-1.txt')
-"""
-
-"""
-g = AdjacencyMatrix()
-graph = construct_graph_from_file(g, '../test/fixtures/graph-1.txt')
-
-print(graph.adjacency_matrix)
-print(graph.nodes)
-print(graph.neighbors(Node(4)))
-print(graph.add_node(Node(1)))
-print(graph.add_node(Node(6)))
-print(graph.add_node(Node(11)))
-print(graph.nodes)
-print(graph.remove_node(Node(6)))
-print(graph.nodes)
-print(graph.neighbors(Node(9)))
-"""
-
-"""
-g = ObjectOriented()
-graph = construct_graph_from_file(g, '../test/fixtures/graph-1.txt')
-"""
-"""
-print(graph.neighbors(Node(1)))
-print(graph.neighbors(Node(20)))
-print(graph.adjacent(Node(1), Node(2)))#true
-print(graph.adjacent(Node(20), Node(2)))#not exist
-print(graph.adjacent(Node(1), Node(5)))#false
-print(graph.add_node(Node(1)))#False
-print(graph.add_node(Node(20)))#True
-print(graph.remove_node(Node(2)))#True
-print(graph.add_edge(Edge(Node(0), Node(3), 9)))
-print(graph.remove_edge(Edge(Node(0), Node(10), 9)))
-"""
+    def distance(self, node_1, node_2):
+        if not self.adjacent(node_1, node_2):
+            return None # No edge connected
+        for edge in self.edges:
+            if edge.from_node == node_1 and edge.to_node == node_2:
+                return edge.weight
+    
