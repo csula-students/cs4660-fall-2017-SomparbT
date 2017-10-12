@@ -3,6 +3,7 @@ utils package is for some quick utility methods
 
 such as parsing
 """
+from io import open
 from .graph import Node
 from .graph import Edge
 
