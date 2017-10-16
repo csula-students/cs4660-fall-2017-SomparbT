@@ -16,15 +16,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import json
 import codecs
+import time
 
 # http lib import for Python 2 and 3: alternative 4
 try:
     from urllib.request import urlopen, Request
 except ImportError:
     from urllib2 import urlopen, Request
-
-from graph import graph as GRAPH
-from graph import utils
 
 try:
     import Queue as Q  # ver. < 3.0
@@ -65,38 +63,16 @@ def __json_request(target_url, body):
     response = json.load(reader(urlopen(req, jsondataasbytes)))
     return response
 
-class Room(object):
-    """Node represents basic unit of graph"""
-    def __init__(self, id, name, effect):
-        self.id = id
-        self.name = name
-        self.effect = effect
-
-    def __str__(self):
-        return '{}({}):{}'.format(self.name, self.id, self.effect)
-    def __repr__(self):
-        return '{}({}):{}'.format(self.name, self.id, self.effect)
-
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.id == other.id
-        return False
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        return hash(self.id)
-
-def bfs(graph, initial_node, dest_node):
+def bfs(initial_room, dest_room):
     """
     Breadth First Search
-    uses graph to do search from the initial_node to dest_node
-    returns a list of actions going from the initial node to dest_node
+    uses graph to do search from the initial_room to dest_room
+    returns a list of transitions going from the initial_room to dest_room
     """
     frontier = Q.Queue()
-    frontier.put(initial_node)
+    frontier.put(initial_room)
     came_from = {}
-    came_from[initial_node] = None
+    came_from[initial_room] = None
 
     while not frontier.empty():
         current = frontier.get()           
@@ -106,91 +82,132 @@ def bfs(graph, initial_node, dest_node):
                 frontier.put(child)
                 came_from[child] = current
                 
-                if child == dest_node:
+                if child == dest_room:
                     break #early exit
         else:
             continue
         break
 
-    return construct_path(graph, initial_node, dest_node, came_from)
+    return construct_path(initial_room, dest_room, came_from)
 
-def dijkstra_search(graph, initial_node, dest_node):
+def dijkstra_search(initial_room, dest_room):
     """
     Dijkstra Search
-    uses graph to do search from the initial_node to dest_node
-    returns a list of actions going from the initial node to dest_node
+    uses graph to do search from the initial_room to dest_room
+    returns a list of transitions going from the initial_room to dest_room
     """
     frontier = Q.PriorityQueue()
     key = 1 #assign to each element to make them oderable
-    frontier.put((0, key, initial_node)) #(priority, key, node)
+    frontier.put((0, key, initial_room)) #(priority, key, node)
     came_from = {}
     cost_so_far = {}
-    came_from[initial_node] = None
-    cost_so_far[initial_node] = 0
+    came_from[initial_room] = None
+    cost_so_far[initial_room] = 0
+    visited_node = set()
 
     while not frontier.empty():
         current = frontier.get()[2]
 
-        if current == dest_node:
+        if current == dest_room:
             break
 
-        for child in findNeighbors(current):
-            new_cost = cost_so_far[current] + findDistance(current, child)
+        if current in visited_node:
+            continue
+
+        visited_node.add(current)
+
+        for child in filter(lambda child: child not in visited_node, findNeighbors(current)):
+            new_cost = cost_so_far[current] - findDistance(current, child)
             if child not in cost_so_far or new_cost < cost_so_far[child]:
                 cost_so_far[child] = new_cost
                 priority = new_cost
                 key += 1
                 frontier.put((priority, key, child))
                 came_from[child] = current
-                
-    return construct_path(graph, initial_node, dest_node, came_from)
 
-def findNeighbors(current_node):
+    return construct_path(initial_room, dest_room, came_from)
+
+def findNeighbors(current_room):
     """
-    
+    private helper method parsing JSON string of current room
+    returns a list of neightbors id
     """
-    json_neighbors = get_state(current_node.data.id)['neighbors']
-    neighbors = []
-    for json_neighbor in json_neighbors:
-        neighbors.append(GRAPH.Node(parse_room(get_state(json_neighbor['id']))))
+    json_neighbors = get_state_local(current_room)['neighbors']
 
-    return neighbors
+    return list(map((lambda json_neighbor: json_neighbor['id']), json_neighbors))
+    #return neighbors
 
-def findDistance(current_node, next_node):
+def findDistance(current_room, next_room):
     """
-    
+    private helper method parsing JSON string of transition
+    returns effect which defines cost of moving from current_room to next_room
     """
-    return float(transition_state(current_node.data.id, next_node.data.id)['event']['effect'])
+    return float(transition_state_local(current_room, next_room)['event']['effect'])
 
 
-def construct_path(graph, initial_node, dest_node, came_from):
+def construct_path(initial_room, dest_room, came_from):
+    """
+    private helper method for constructing moving path from initial_room to dest_room
+    returns a list of transitions from initial_room to dest_room
+    """
     path = []
-    current = dest_node
-    while current != initial_node:
+    current = dest_room
+    hp = 0
+    while current != initial_room:
         parent = came_from[current]
-        path.append(_graph.Edge(parent, current, findDistance(parent, current)))
+        effect = transition_state_local(parent, current)['event']['effect']
+        hp += effect
+        path.append('{}({}):{}({}):{}'.format(get_state_local(parent)['location']['name'], parent, get_state_local(current)['location']['name'], current, effect))
         current = parent
     path.reverse()
+    path.append('Total hp: {}'.format(hp))
     return path
 
-def parse_room(json_room):
-    return Room(json_room['id'], json_room['location']['name'], 0) 
+def get_state_local(room_id):
+    """
+    private helper method for storing state's JSON from server at local
+    """
+    global local_state
+    try:
+        return local_state[room_id]
+    except KeyError:
+        local_state[room_id] = get_state(room_id)
+        return local_state[room_id]
+
+def transition_state_local(room_id, next_room_id):
+    """
+    private helper method for storing transition's JSON from server at local
+    """
+    global local_transition
+    try:
+        return local_transition[(room_id, next_room_id)]
+    except KeyError:
+        local_transition[(room_id, next_room_id)] = transition_state(room_id, next_room_id)
+        return local_transition[(room_id, next_room_id)]     
 
 if __name__ == "__main__":
     # Your code starts here
+    local_state = {}
+    local_transition = {}
     empty_room = get_state('7f3dc077574c013d98b2de8f735058b4')
     #print(empty_room)
     #print(transition_state(empty_room['id'], empty_room['neighbors'][0]['id']))
 
     dark_room = get_state('f1f131f647621a4be7c71292e79613f9')
 
-    g1 = GRAPH.AdjacencyList()
-
-    result = bfs(g1, GRAPH.Node(parse_room(empty_room)), GRAPH.Node(parse_room(dark_room)))   
+    print('BFS Path:')
+    start_time = time.time()
+    result = bfs(empty_room['id'], dark_room['id'])
     for edge in result:
         print(edge)
 
-    g2 = GRAPH.AdjacencyList()
-    result = dijkstra_search(g2, GRAPH.Node(parse_room(empty_room)), GRAPH.Node(parse_room(dark_room)))   
+    print("bfs: %.2f seconds" % (time.time() - start_time))
+    print()
+    print('Dijkstra Path:')
+
+    start_time = time.time()
+    result = dijkstra_search(empty_room['id'], dark_room['id']) 
     for edge in result:
        print(edge)
+
+    print("dijkstra: %.2f seconds" % (time.time() - start_time))
