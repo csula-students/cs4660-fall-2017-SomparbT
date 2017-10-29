@@ -77,13 +77,12 @@ def bfs(initial_room, dest_room):
     while not frontier.empty():
         current = frontier.get()           
 
-        for child in findNeighbors(current):
-            if child not in came_from:
-                frontier.put(child)
-                came_from[child] = current
+        for child in filter(lambda child: child not in came_from, findNeighbors(current)):
+            frontier.put(child)
+            came_from[child] = current
                 
-                if child == dest_room:
-                    break #early exit
+            if child == dest_room:
+                break #early exit
         else:
             continue
         break
